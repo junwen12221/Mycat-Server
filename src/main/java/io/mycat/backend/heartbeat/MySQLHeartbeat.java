@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese
@@ -299,6 +299,7 @@ public class MySQLHeartbeat extends DBHeartbeat {
 						int theSourceHBStatus = theSourceHB.getStatus();
 						if (theSourceHBStatus == DBHeartbeat.OK_STATUS) {
 							if (switchType == DataHostConfig.SYN_STATUS_SWITCH_DS) {
+								LOGGER.warn("switchSourceIfNeed: LagTime=" + theSourceHB.getSlaveBehindMaster());
 								if (Integer.valueOf(0).equals( theSourceHB.getSlaveBehindMaster())) {
 									LOGGER.info("try to switch datasource ,slave is synchronized to master " + theSource.getConfig());
 									pool.switchSourceOrVoted(nextId, true, reason);

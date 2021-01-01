@@ -1,10 +1,10 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>io.mycat</groupId>
 	<artifactId>Mycat-server</artifactId>
-	<version>1.6.7.1-release</version>
+	<version>1.6.7.6-release</version>
 	<packaging>jar</packaging>
 	<name>Mycat-server</name>
 	<description>The project of Mycat-server</description>
@@ -12,7 +12,7 @@
 
 	<properties>
 		<app.encoding>UTF-8</app.encoding>
-		<!-- maven.build.timestamp.format>yyyyMMdd</maven.build.timestamp.format> 
+		<!-- maven.build.timestamp.format>yyyyMMdd</maven.build.timestamp.format>
 			<buildNumber>${maven.build.timestamp}</buildNumber      -->
 		<maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss</maven.build.timestamp.format>
 		<version.template.file>version.txt.template</version.template.file>
@@ -43,12 +43,12 @@
 		</snapshotRepository>
 	</distributionManagement -->
 	<dependencies>
-		<!-- <dependency> <groupId>com.google.guava</groupId> <artifactId>guava-parent</artifactId> 
+		<!-- <dependency> <groupId>com.google.guava</groupId> <artifactId>guava-parent</artifactId>
 			<version>18.0</version> </dependency> -->
 		<dependency>
 			<groupId>org.mongodb</groupId>
 			<artifactId>mongo-java-driver</artifactId>
-			<version>2.11.4</version>
+			<version>3.11.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.iq80.leveldb</groupId>
@@ -63,7 +63,7 @@
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
-			<version>19.0</version>
+			<version>28.2-jre</version>
 		</dependency>
 		<dependency>
 			<groupId>com.alibaba</groupId>
@@ -92,41 +92,41 @@
 			<version>4.4</version>
 			<scope>provided</scope>
 		</dependency>
-        <dependency>
-            <groupId>org.apache.velocity</groupId>
-            <artifactId>velocity</artifactId>
-            <version>1.7</version>
-        </dependency>
+		<dependency>
+			<groupId>org.apache.velocity</groupId>
+			<artifactId>velocity</artifactId>
+			<version>1.7</version>
+		</dependency>
 		<dependency>
 			<groupId>org.codehaus.jsr166-mirror</groupId>
 			<artifactId>jsr166y</artifactId>
 			<version>1.7.0</version>
 			<scope>test</scope>
 		</dependency>
-        <dependency>
-            <groupId>com.lmax</groupId>
-            <artifactId>disruptor</artifactId>
-            <version>3.3.4</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
-            <version>2.5</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core</artifactId>
-            <version>2.5</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-1.2-api</artifactId>
-            <version>2.5</version>
-        </dependency>
+		<dependency>
+			<groupId>com.lmax</groupId>
+			<artifactId>disruptor</artifactId>
+			<version>3.3.4</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-slf4j-impl</artifactId>
+			<version>2.13.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<version>2.13.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-1.2-api</artifactId>
+			<version>2.13.0</version>
+		</dependency>
 		<dependency>
 			<groupId>com.univocity</groupId>
 			<artifactId>univocity-parsers</artifactId>
-			<version>2.2.1</version>
+			<version>2.8.4</version>
 			<type>jar</type>
 		</dependency>
 
@@ -155,32 +155,32 @@
 		<dependency>
 			<groupId>org.apache.curator</groupId>
 			<artifactId>curator-framework</artifactId>
-			<version>2.11.0</version>
+			<version>4.0.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.curator</groupId>
 			<artifactId>curator-recipes</artifactId>
-			<version>2.11.0</version>
+			<version>4.0.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.curator</groupId>
 			<artifactId>curator-test</artifactId>
-			<version>2.11.0</version>
+			<version>4.0.1</version>
 			<scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>log4j</groupId>
-                    <artifactId>log4j</artifactId>
-                </exclusion>
-            </exclusions>
+			<exclusions>
+				<exclusion>
+					<groupId>log4j</groupId>
+					<artifactId>log4j</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>com.alibaba</groupId>
 			<artifactId>fastjson</artifactId>
-			<version>1.2.12</version>
+			<version>1.2.68</version>
 		</dependency>
 		<!-- joda日期处理工具 -->
-        <dependency>
+		<dependency>
 			<groupId>joda-time</groupId>
 			<artifactId>joda-time</artifactId>
 			<version>2.9.3</version>
@@ -211,6 +211,12 @@
 			<artifactId>kryo</artifactId>
 			<version>2.10</version>
 		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.apache.commons/commons-csv -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-csv</artifactId>
+			<version>1.8</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.hamcrest</groupId>
@@ -231,6 +237,13 @@
 			<artifactId>netty-buffer</artifactId>
 			<version>4.1.9.Final</version>
 		</dependency>
+		<!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>okhttp</artifactId>
+			<version>4.2.2</version>
+		</dependency>
+
 	</dependencies>
 
 
@@ -361,8 +374,8 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<configuration>
-					<source>1.7</source>
-					<target>1.7</target>
+					<source>1.8</source>
+					<target>1.8</target>
 					<encoding>${app.encoding}</encoding>
 				</configuration>
 			</plugin>
@@ -397,7 +410,7 @@
 						<goals>
 							<goal>test-jar</goal>
 						</goals>
-						<!-- configuration> <finalName>${project.build.finalName}-${buildNumber}</finalName> 
+						<!-- configuration> <finalName>${project.build.finalName}-${buildNumber}</finalName>
 							</configuration -->
 					</execution>
 				</executions>
@@ -415,7 +428,7 @@
 						<file>
 							<name>.settings/org.eclipse.core.resources.prefs</name>
 							<content>
-               <![CDATA[eclipse.preferences.version=1${line.separator}encoding/<project>=${app.encoding}${line.separator}]]>
+								<![CDATA[eclipse.preferences.version=1${line.separator}encoding/<project>=${app.encoding}${line.separator}]]>
 							</content>
 						</file>
 					</additionalConfig>
@@ -426,7 +439,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>appassembler-maven-plugin</artifactId>
-				<version>1.7</version>
+				<version>1.8</version>
 				<configuration>
 					<configurationDirectory>conf</configurationDirectory>
 					<includeConfigurationDirectoryInClasspath>true</includeConfigurationDirectoryInClasspath>
@@ -450,7 +463,7 @@
 								</systemProperties>
 								<extraArguments>
 									<extraArgument>-server </extraArgument>
-									<extraArgument>-XX:MaxPermSize=64M</extraArgument>
+									<!--<extraArgument>-XX:MaxPermSize=64M</extraArgument>-->
 									<extraArgument>-XX:+AggressiveOpts</extraArgument>
 									<extraArgument>-XX:MaxDirectMemorySize=2G</extraArgument>
 									<!-- 远程JMX -->

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -25,6 +25,8 @@ package io.mycat.server;
 
 import java.io.IOException;
 import java.nio.channels.NetworkChannel;
+import java.util.Queue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,15 +34,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.mycat.MycatServer;
+import io.mycat.backend.mysql.listener.DefaultSqlExecuteStageListener;
+import io.mycat.backend.mysql.listener.SqlExecuteStageListener;
 import io.mycat.config.ErrorCode;
 import io.mycat.config.model.SchemaConfig;
 import io.mycat.net.FrontendConnection;
 import io.mycat.route.RouteResultset;
-import io.mycat.server.handler.MysqlInformationSchemaHandler;
 import io.mycat.server.handler.MysqlProcHandler;
 import io.mycat.server.parser.ServerParse;
 import io.mycat.server.response.Heartbeat;
 import io.mycat.server.response.InformationSchemaProfiling;
+import io.mycat.server.response.InformationSchemaProfilingSqlyog;
 import io.mycat.server.response.Ping;
 import io.mycat.server.util.SchemaUtil;
 import io.mycat.util.SplitUtil;
@@ -54,6 +58,9 @@ public class ServerConnection extends FrontendConnection {
 			.getLogger(ServerConnection.class);
 	private static final long AUTH_TIMEOUT = 15 * 1000L;
 
+	/** 保存SET SQL_SELECT_LIMIT的值, default 解析为-1. */
+	private volatile  int sqlSelectLimit = -1;
+	private volatile  boolean txReadonly;
 	private volatile int txIsolation;
 	private volatile boolean autocommit;
 	private volatile boolean preAcStates; //上一个ac状态,默认为true
@@ -65,6 +72,8 @@ public class ServerConnection extends FrontendConnection {
 	 * 标志是否执行了lock tables语句，并处于lock状态
 	 */
 	private volatile boolean isLocked = false;
+    private Queue<SqlEntry> executeSqlQueue;
+    private SqlExecuteStageListener listener;
 	
 	public ServerConnection(NetworkChannel channel)
 			throws IOException {
@@ -72,6 +81,9 @@ public class ServerConnection extends FrontendConnection {
 		this.txInterrupted = false;
 		this.autocommit = true;
 		this.preAcStates = true;
+		this.txReadonly = false;
+        this.executeSqlQueue = new LinkedBlockingQueue<>();
+        this.listener = new DefaultSqlExecuteStageListener(this);
 	}
 
 	@Override
@@ -98,6 +110,22 @@ public class ServerConnection extends FrontendConnection {
 
 	public void setAutocommit(boolean autocommit) {
 		this.autocommit = autocommit;
+	}
+
+	public boolean isTxReadonly() {
+		return txReadonly;
+	}
+
+	public void setTxReadonly(boolean txReadonly) {
+		this.txReadonly = txReadonly;
+	}
+
+	public int getSqlSelectLimit() {
+		return sqlSelectLimit;
+	}
+
+	public void setSqlSelectLimit(int sqlSelectLimit) {
+		this.sqlSelectLimit = sqlSelectLimit;
 	}
 
 	public long getLastInsertId() {
@@ -159,7 +187,7 @@ public class ServerConnection extends FrontendConnection {
 		Heartbeat.response(this, data);
 	}
 
-	public void execute(String sql, int type) {
+    public void execute(String sql, int type) {
 		//连接状态检查
 		if (this.isClosed()) {
 			LOGGER.warn("ignore execute ,server connection is closed " + this);
@@ -178,19 +206,23 @@ public class ServerConnection extends FrontendConnection {
 		if (db == null) {
 			db = SchemaUtil.detectDefaultDb(sql, type);
 			if (db == null) {
-				writeErrMessage(ErrorCode.ERR_BAD_LOGICDB, "No MyCAT Database selected");
-				return;
+				db = MycatServer.getInstance().getConfig().getUsers().get(user).getDefaultSchema();
+				if (db == null) {
+					writeErrMessage(ErrorCode.ERR_BAD_LOGICDB,
+							"No MyCAT Database selected");
+					return ;
+				}
 			}
 			isDefault = false;
 		}
 		
 		// 兼容PhpAdmin's, 支持对MySQL元数据的模拟返回
 		//// TODO: 2016/5/20 支持更多information_schema特性
-		if (ServerParse.SELECT == type 
-				&& db.equalsIgnoreCase("information_schema") ) {
-			MysqlInformationSchemaHandler.handle(sql, this);
-			return;
-		}
+//		if (ServerParse.SELECT == type
+//				&& db.equalsIgnoreCase("information_schema") ) {
+//			MysqlInformationSchemaHandler.handle(sql, this);
+//			return;
+//		}
 
 		if (ServerParse.SELECT == type 
 				&& sql.contains("mysql") 
@@ -220,7 +252,13 @@ public class ServerConnection extends FrontendConnection {
 			InformationSchemaProfiling.response(this);
 			return;
 		}
-		
+
+		//fix sqlyog select state, round(sum(duration),5) as `duration (summed) in sec` from information_schema.profiling where query_id = 0 group by state order by `duration (summed) in sec` desc
+		if(ServerParse.SELECT == type &&sql.contains(" information_schema.profiling ")&&sql.contains("duration (summed) in sec"))
+		{
+			InformationSchemaProfilingSqlyog.response(this);
+			return;
+		}
 		/* 当已经设置默认schema时，可以通过在sql中指定其它schema的方式执行
 		 * 相关sql，已经在mysql客户端中验证。
 		 * 所以在此处增加关于sql中指定Schema方式的支持。
@@ -247,9 +285,16 @@ public class ServerConnection extends FrontendConnection {
 		// 检查当前使用的DB
 		String db = this.schema;
 		if (db == null) {
-			writeErrMessage(ErrorCode.ERR_BAD_LOGICDB,
-					"No MyCAT Database selected");
-			return null;
+			db = SchemaUtil.detectDefaultDb(sql, type);
+			if (db == null){
+				db = MycatServer.getInstance().getConfig().getUsers().get(user).getDefaultSchema();
+				if (db == null) {
+					writeErrMessage(ErrorCode.ERR_BAD_LOGICDB,
+							"No MyCAT Database selected");
+					return null;
+				}
+			}
+
 		}
 		SchemaConfig schema = MycatServer.getInstance().getConfig()
 				.getSchemas().get(db);
@@ -299,11 +344,23 @@ public class ServerConnection extends FrontendConnection {
 			return;
 		}
 		if (rrs != null) {
-			// session执行
-			session.execute(rrs, rrs.isSelectForUpdate()?ServerParse.UPDATE:type);
-		}
-		
- 	}
+            // #支持mariadb驱动useBatchMultiSend=true,连续接收到的sql先放入队列，等待前面处理完成后再继续处理。
+            // 参考https://mariadb.com/kb/en/option-batchmultisend-description/
+            boolean executeNow = false;
+            synchronized (this.executeSqlQueue) {
+                executeNow = this.executeSqlQueue.isEmpty();
+                this.executeSqlQueue.add(new SqlEntry(sql, type, rrs));
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug("add queue,executeSqlQueue size {}", executeSqlQueue.size());
+                }
+            }
+
+            if (executeNow) {
+                this.executeSqlId++;
+                session.execute(rrs, rrs.isSelectForUpdate() ? ServerParse.UPDATE : type);
+            }
+        }
+    }
 
 	/**
 	 * 提交事务
@@ -425,5 +482,69 @@ public class ServerConnection extends FrontendConnection {
 	public void setPreAcStates(boolean preAcStates) {
 		this.preAcStates = preAcStates;
 	}
+
+    public SqlExecuteStageListener getListener() {
+        return listener;
+    }
+
+    public void setListener(SqlExecuteStageListener listener) {
+        this.listener = listener;
+    }
+
+    @Override
+    public void checkQueueFlow() {
+        RouteResultset rrs = session.getRrs();
+        if (rrs != null && rrs.getNodes().length > 1 && session.getRrs().needMerge()) {
+            // 多节点合并结果集语句需要拉取所有数据，无法流控
+            return;
+        } else {
+            // 非合并结果集语句进行流量控制检查。
+            flowController.check(session.getTargetMap());
+        }
+    }
+
+    @Override
+    public void resetConnection() {
+        // 1 简单点直接关闭后端连接。若按照mysql官方的提交事务或回滚事务，mycat都会回包给应用，引发包乱序。
+        session.closeAndClearResources("receive com_reset_connection");
+
+        // 2 重置用户变量
+        this.txInterrupted = false;
+        this.autocommit = true;
+        this.preAcStates = true;
+        this.txReadonly = false;
+        this.lastInsertId = 0;
+
+        super.resetConnection();
+    }
+    /**
+     * sql执行完成后回调函数
+     */
+    public void onEventSqlCompleted() {
+        SqlEntry sqlEntry = null;
+        synchronized (this.executeSqlQueue) {
+            this.executeSqlQueue.poll();// 弹出已经执行成功的
+            sqlEntry = this.executeSqlQueue.peek();
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("poll queue,executeSqlQueue size {}", this.executeSqlQueue.size());
+            }
+        }
+        if (sqlEntry != null) {
+            this.executeSqlId++;
+            session.execute(sqlEntry.rrs, sqlEntry.rrs.isSelectForUpdate() ? ServerParse.UPDATE : sqlEntry.type);
+        }
+    }
+
+    private class SqlEntry {
+        public String sql;
+        public int type;
+        public RouteResultset rrs;
+
+        public SqlEntry(String sql, int type, RouteResultset rrs) {
+            this.sql = sql;
+            this.type = type;
+            this.rrs = rrs;
+        }
+    }
 
 }

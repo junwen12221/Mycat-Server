@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -28,16 +28,30 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.druid.sql.ast.SQLStatement;
+import com.alibaba.druid.sql.ast.statement.SQLSelect;
+import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
+import com.alibaba.druid.sql.parser.SQLParserUtils;
+import com.alibaba.druid.sql.parser.SQLStatementParser;
+import com.alibaba.druid.util.JdbcUtils;
+
+import io.mycat.net.mysql.FieldPacket;
+
 /**
  * @author mycat, CrazyPig
  */
 public class PreparedStatement {
-
+    private static final Logger LOGGER = LoggerFactory.getLogger(PreparedStatement.class);
     private long id;
     private String statement;
-    private int columnsNumber;
+    private String[] columnNames;
     private int parametersNumber;
     private int[] parametersType;
+    private FieldPacket[] params;
+    private FieldPacket[] fields;
     /**
      * 存放COM_STMT_SEND_LONG_DATA命令发送过来的字节数据
      * <pre>
@@ -47,13 +61,45 @@ public class PreparedStatement {
      */
     private Map<Long, ByteArrayOutputStream> longDataMap;
 
-    public PreparedStatement(long id, String statement, int columnsNumber, int parametersNumber) {
+    public PreparedStatement(long id, String statement, int parametersNumber) {
         this.id = id;
         this.statement = statement;
-        this.columnsNumber = columnsNumber;
+        // this.columnNames = getColumns(statement);
         this.parametersNumber = parametersNumber;
         this.parametersType = new int[parametersNumber];
         this.longDataMap = new HashMap<Long, ByteArrayOutputStream>();
+
+        constructColumns();
+    }
+
+    // 获取预处理语句中column的个数
+    public void constructColumns() {
+        String[] columnNames;
+        try {
+            SQLStatementParser sqlStatementParser = SQLParserUtils.createSQLStatementParser(statement, JdbcUtils.MYSQL);
+            SQLStatement statement = sqlStatementParser.parseStatement();
+            if (statement instanceof SQLSelectStatement) {
+                SQLSelect select = ((SQLSelectStatement) statement).getSelect();
+                com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSelectQueryBlock query = (com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlSelectQueryBlock) select.getQuery();
+                int size = query.getSelectList().size();
+                if (size == 1){
+                    if("*".equalsIgnoreCase(   query.getSelectList().get(0).toString())){
+                        throw new Exception("unsupport * in select items:" + statement);
+                    }
+                } {
+                    columnNames = new String[size];
+                    for (int i = 0; i < size; i++) {
+                        columnNames[i] = query.getSelectList().get(i).toString();
+                    }
+                    this.columnNames = columnNames;
+                }
+
+            }
+        }catch (Exception e){
+            LOGGER.error("can not get column count",e);
+        }
+
+        this.columnNames = new String[] {};
     }
 
     public long getId() {
@@ -65,7 +111,11 @@ public class PreparedStatement {
     }
 
     public int getColumnsNumber() {
-        return columnsNumber;
+        if (this.fields != null) {
+            return this.fields.length;
+        } else {
+            return this.columnNames.length;
+        }
     }
 
     public int getParametersNumber() {
@@ -74,6 +124,10 @@ public class PreparedStatement {
 
     public int[] getParametersType() {
         return parametersType;
+    }
+    
+    public boolean hasLongData(long paramId) {
+    	return longDataMap.containsKey(paramId);
     }
 
     public ByteArrayOutputStream getLongData(long paramId) {
@@ -104,4 +158,27 @@ public class PreparedStatement {
     		longDataMap.get(paramId).write(data);
     	}
     }
+
+    public String[] getColumnNames() {
+        return columnNames;
+    }
+
+    public FieldPacket[] getParams() {
+        return params;
+    }
+
+    public void setParams(FieldPacket[] params) {
+        this.params = params;
+        this.parametersNumber = params == null ? 0 : params.length;
+    }
+
+    public FieldPacket[] getFields() {
+        return fields;
+    }
+
+    public void setFields(FieldPacket[] fields) {
+        this.fields = fields;
+
+    }
+
 }

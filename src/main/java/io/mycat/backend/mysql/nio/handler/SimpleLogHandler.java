@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -25,7 +25,8 @@ package io.mycat.backend.mysql.nio.handler;
 
 import java.util.List;
 
-import org.slf4j.Logger; import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.mycat.backend.BackendConnection;
 
@@ -46,31 +47,37 @@ public class SimpleLogHandler implements ResponseHandler{
 
 	@Override
 	public void errorResponse(byte[] err, BackendConnection conn) {
-		LOGGER.warn("caught error resp: " + conn + " " + new String(err));
+		LOGGER.warn("caught error resp: " + conn + " " + bytesToHex(err));
 	}
 
 	@Override
 	public void okResponse(byte[] ok, BackendConnection conn) {
-		LOGGER.info("okResponse: " + conn );
+		LOGGER.info("okResponse: " + conn + "," + bytesToHex(ok) );
 		
 	}
 
 	@Override
 	public void fieldEofResponse(byte[] header, List<byte[]> fields,
 			byte[] eof, BackendConnection conn) {
-		LOGGER.info("fieldEofResponse: " + conn );
+		LOGGER.info("fieldEofResponse : " + conn );
+		LOGGER.info("SimpleLogHandler.fieldEofResponse header: " + bytesToHex(header) );
+		for(byte[] field : fields) {
+			LOGGER.info("SimpleLogHandler.fieldEofResponse fields: " + bytesToHex(field) );
+		}
+		LOGGER.info("SimpleLogHandler.fieldEofResponse eof: " + bytesToHex(eof) );
 		
 	}
 
 	@Override
 	public void rowResponse(byte[] row, BackendConnection conn) {
 		LOGGER.info("rowResponse: " + conn );
-		
+		System.out.println("SimpleLogHandler.rowResponse: " + bytesToHex(row) );
 	}
 
 	@Override
 	public void rowEofResponse(byte[] eof, BackendConnection conn) {
 		LOGGER.info("rowEofResponse: " + conn );
+		LOGGER.info("SimpleLogHandler.rowEofResponse: " + bytesToHex(eof) );
 		
 	}
 
@@ -86,4 +93,11 @@ public class SimpleLogHandler implements ResponseHandler{
 		
 	}
 
+	public static String bytesToHex(byte[] bytes) {
+		StringBuilder sb = new StringBuilder();
+		for (byte b : bytes) {
+			sb.append(String.format("%02x ", b));
+		}
+		return sb.toString();
+	}
 }

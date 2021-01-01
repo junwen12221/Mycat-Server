@@ -12,6 +12,7 @@ import com.alibaba.druid.sql.ast.statement.SQLInsertStatement;
 import com.alibaba.druid.sql.ast.statement.SQLInsertStatement.ValuesClause;
 import com.alibaba.druid.sql.dialect.mysql.ast.statement.MySqlInsertStatement;
 import io.mycat.backend.mysql.nio.handler.FetchStoreNodeOfChildTableHandler;
+import io.mycat.backend.mysql.nio.handler.JDBCFetchStoreNodeOfChildTableHandler;
 import io.mycat.config.model.SchemaConfig;
 import io.mycat.config.model.TableConfig;
 import io.mycat.route.RouteResultset;
@@ -147,8 +148,16 @@ public class DruidInsertParser extends DefaultDruidParser {
 		if (LOGGER.isDebugEnabled()) {
 			LOGGER.debug("find root parent's node sql "+ findRootTBSql);
 		}
-		FetchStoreNodeOfChildTableHandler fetchHandler = new FetchStoreNodeOfChildTableHandler();
-		String dn = fetchHandler.execute(schema.getName(),findRootTBSql, tc.getRootParent().getDataNodes());
+
+		String dn = null;
+		if (tc.getRootParent().getFetchStoreNodeByJdbc()) {
+			JDBCFetchStoreNodeOfChildTableHandler jdbcFetchHandler = new JDBCFetchStoreNodeOfChildTableHandler();
+			dn = jdbcFetchHandler.execute(schema.getName(),findRootTBSql, tc.getRootParent().getDataNodes());
+		} else {
+			FetchStoreNodeOfChildTableHandler FetchHandler = new FetchStoreNodeOfChildTableHandler();
+			FetchHandler.execute(schema.getName(),findRootTBSql, tc.getRootParent().getDataNodes());
+		}
+
 		if (dn == null) {
 			throw new SQLNonTransientException("can't find (root) parent sharding node for sql:"+ sql);
 		}
@@ -175,7 +184,7 @@ public class DruidInsertParser extends DefaultDruidParser {
 				isFound = true;
 				String column = StringUtil.removeBackquote(insertStmt.getColumns().get(i).toString());
 
-				String shardingValue = getShardingValue(insertStmt.getValues().getValues().get(i));
+				String shardingValue = StringUtil.removeBackquote(getShardingValue(insertStmt.getValues().getValues().get(i)));
 				insertStmt.getValues().getValues().set(i,new SQLCharExpr(shardingValue));
 				ctx.setSql(insertStmt.toString());
 
@@ -242,10 +251,10 @@ public class DruidInsertParser extends DefaultDruidParser {
 						throw new SQLNonTransientException(msg);
 					}
 					SQLExpr expr = valueClause.getValues().get(shardingColIndex);
-					String shardingValue = getShardingValue(expr);
+					String shardingValue = StringUtil.removeBackquote(getShardingValue(expr));
 					valueClause.getValues().set(shardingColIndex, new SQLCharExpr(shardingValue));
 
-					Integer nodeIndex = algorithm.calculate(shardingValue);
+					Integer nodeIndex = algorithm.calculate(StringUtil.removeBackquote(shardingValue));
 					if(algorithm instanceof SlotFunction){
 						slotsMap.put(nodeIndex,((SlotFunction) algorithm).slotValue()) ;
 					}
@@ -322,7 +331,14 @@ public class DruidInsertParser extends DefaultDruidParser {
 			shardingValue = charExpr.getText();
 		} else if (expr instanceof SQLMethodInvokeExpr) {
 			SQLMethodInvokeExpr methodInvokeExpr = (SQLMethodInvokeExpr)expr;
-			shardingValue = tryInvokeSQLMethod(methodInvokeExpr);
+			try {
+				shardingValue = tryInvokeSQLMethod(methodInvokeExpr);
+			}catch (Exception e){
+				LOGGER.error("",e);
+			}
+			if (shardingValue == null){
+				shardingValue = expr.toString();
+			}
 		} else {
 			shardingValue = expr.toString();
 		}

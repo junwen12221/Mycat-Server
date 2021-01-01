@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese
@@ -28,6 +28,7 @@ import io.mycat.config.model.rule.RuleConfig;
 import io.mycat.util.SplitUtil;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -39,6 +40,7 @@ public class TableConfig {
     private final String name;
     private final String primaryKey;
     private final boolean autoIncrement;
+    private final boolean fetchStoreNodeByJdbc;
     private final boolean needAddLimit;
     private final Set<String> dbTypes;
     private final int tableType;
@@ -55,7 +57,6 @@ public class TableConfig {
     // only has one level of parent
     private final boolean secondLevel;
     private final boolean partionKeyIsPrimaryKey;
-    private final Random rand = new Random();
 
     private volatile List<SQLTableElement> tableElementList;
     private volatile String tableStructureSQL;
@@ -65,7 +66,7 @@ public class TableConfig {
     public TableConfig(String tableName, String primaryKey, boolean autoIncrement, boolean needAddLimit, int tableType,
                        String dataNode, Set<String> dbType, RuleConfig rule, boolean ruleRequired,
                        TableConfig parentTC, boolean isChildTable, String joinKey,
-                       String parentKey, String subTables) {
+                       String parentKey, String subTables, boolean fetchStoreNodeByJdbc) {
         if (tableName == null) {
             throw new IllegalArgumentException("table name is null");
         } else if (dataNode == null) {
@@ -74,6 +75,7 @@ public class TableConfig {
         this.primaryKey = primaryKey;
         this.autoIncrement = autoIncrement;
         this.needAddLimit = needAddLimit;
+        this.fetchStoreNodeByJdbc = fetchStoreNodeByJdbc;
         this.tableType = tableType;
         this.dbTypes = dbType;
         if (ruleRequired && rule == null) {
@@ -247,7 +249,7 @@ public class TableConfig {
     }
 
     public String getRandomDataNode() {
-        int index = Math.abs(rand.nextInt(Integer.MAX_VALUE)) % dataNodes.size();
+        int index = Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE)) % dataNodes.size();
         return dataNodes.get(index);
     }
 
@@ -304,5 +306,9 @@ public class TableConfig {
 
     public void setDataNodeTableStructureSQLMap(Map<String, List<String>> dataNodeTableStructureSQLMap) {
         this.dataNodeTableStructureSQLMap = dataNodeTableStructureSQLMap;
+    }
+
+    public boolean getFetchStoreNodeByJdbc() {
+        return this.fetchStoreNodeByJdbc;
     }
 }

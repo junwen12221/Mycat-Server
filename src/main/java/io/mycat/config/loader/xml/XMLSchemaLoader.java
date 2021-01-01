@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese
@@ -144,6 +144,7 @@ public class XMLSchemaLoader implements SchemaLoader {
             //读取各个属性
             String name = schemaElement.getAttribute("name");
             String dataNode = schemaElement.getAttribute("dataNode");
+            String randomDataNode = schemaElement.getAttribute("randomDataNode");
             String checkSQLSchemaStr = schemaElement.getAttribute("checkSQLschema");
             String sqlMaxLimitStr = schemaElement.getAttribute("sqlMaxLimit");
             int sqlMaxLimit = -1;
@@ -178,7 +179,7 @@ public class XMLSchemaLoader implements SchemaLoader {
             }
 
             SchemaConfig schemaConfig = new SchemaConfig(name, dataNode,
-                    tables, sqlMaxLimit, "true".equalsIgnoreCase(checkSQLSchemaStr));
+                    tables, sqlMaxLimit, "true".equalsIgnoreCase(checkSQLSchemaStr),randomDataNode);
 
             //设定DB类型，这对之后的sql语句路由解析有帮助
             if (defaultDbType != null) {
@@ -298,8 +299,28 @@ public class XMLSchemaLoader implements SchemaLoader {
         final String schemaName = node.getAttribute("name");
         Map<String, TableConfig> tables = new TableConfigMap();
         NodeList nodeList = node.getElementsByTagName("table");
+        List<Element> list = new ArrayList<>();
         for (int i = 0; i < nodeList.getLength(); i++) {
             Element tableElement = (Element) nodeList.item(i);
+            String tableNameElement = tableElement.getAttribute("name").toUpperCase();
+            if("true".equalsIgnoreCase(tableElement.getAttribute("splitTableNames"))){
+                String[] split = tableNameElement.split(",");
+                for (String name : split) {
+                    Element node1 = (Element)tableElement.cloneNode(true);
+                    node1.setAttribute("name",name);
+                    list.add(node1);
+                }
+            }else {
+                list.add(tableElement);
+            }
+        }
+        loadTable(schemaName, tables, list);
+        return tables;
+    }
+
+    private void loadTable(String schemaName, Map<String, TableConfig> tables,  List<Element>  nodeList) {
+        for (int i = 0; i < nodeList.size(); i++) {
+            Element tableElement = (Element) nodeList.get(i);
             String tableNameElement = tableElement.getAttribute("name").toUpperCase();
 
             //TODO:路由, 增加对动态日期表的支持
@@ -319,6 +340,11 @@ public class XMLSchemaLoader implements SchemaLoader {
             boolean autoIncrement = false;
             if (tableElement.hasAttribute("autoIncrement")) {
                 autoIncrement = Boolean.parseBoolean(tableElement.getAttribute("autoIncrement"));
+            }
+
+            boolean fetchStoreNodeByJdbc = false;
+            if (tableElement.hasAttribute("fetchStoreNodeByJdbc")) {
+                fetchStoreNodeByJdbc = Boolean.parseBoolean(tableElement.getAttribute("fetchStoreNodeByJdbc"));
             }
             //记录是否需要加返回结果集限制，默认需要加
             boolean needAddLimit = true;
@@ -383,7 +409,7 @@ public class XMLSchemaLoader implements SchemaLoader {
                         autoIncrement, needAddLimit, tableType, dataNode,
                         getDbType(dataNode),
                         (tableRuleConfig != null) ? tableRuleConfig.getRule() : null,
-                        ruleRequired, null, false, null, null, subTables);
+                        ruleRequired, null, false, null, null, subTables, fetchStoreNodeByJdbc);
                 //因为需要等待TableConfig构造完毕才可以拿到dataNode节点数量,所以Rule构造延后到此处 @cjw
                 if ((tableRuleConfig != null) && (tableRuleConfig.getRule().getRuleAlgorithm() instanceof TableRuleAware)) {
                     AbstractPartitionAlgorithm newRuleAlgorithm = tableRuleConfig.getRule().getRuleAlgorithm();
@@ -413,7 +439,6 @@ public class XMLSchemaLoader implements SchemaLoader {
                 processChildTables(tables, table, dataNode, tableElement);
             }
         }
-        return tables;
     }
 
     private String getNewRuleName(String schemaName, String tableName, String name) {
@@ -510,6 +535,7 @@ public class XMLSchemaLoader implements SchemaLoader {
             if (childTbElement.hasAttribute("needAddLimit")) {
                 needAddLimit = Boolean.parseBoolean(childTbElement.getAttribute("needAddLimit"));
             }
+
             String subTables = childTbElement.getAttribute("subTables");
             //子表join键，和对应的parent的键，父子表通过这个关联
             String joinKey = childTbElement.getAttribute("joinKey").toUpperCase();
@@ -518,7 +544,7 @@ public class XMLSchemaLoader implements SchemaLoader {
                     autoIncrement, needAddLimit,
                     TableConfig.TYPE_GLOBAL_DEFAULT, dataNodes,
                     getDbType(dataNodes), null, false, parentTable, true,
-                    joinKey, parentKey, subTables);
+                    joinKey, parentKey, subTables, false);
 
             if (tables.containsKey(table.getName())) {
                 throw new ConfigException("table " + table.getName() + " duplicated!");
@@ -675,6 +701,10 @@ public class XMLSchemaLoader implements SchemaLoader {
         String user = node.getAttribute("user");
         String password = node.getAttribute("password");
         String usingDecrypt = node.getAttribute("usingDecrypt");
+        String checkAliveText = node.getAttribute("checkAlive");
+        if (checkAliveText == null)checkAliveText = Boolean.TRUE.toString();
+        boolean checkAlive = Boolean.parseBoolean(checkAliveText);
+
         String passwordEncryty = DecryptUtil.DBHostDecrypt(usingDecrypt, nodeHost, user, password);
 
         String weightStr = node.getAttribute("weight");
@@ -704,7 +734,7 @@ public class XMLSchemaLoader implements SchemaLoader {
             port = url.getPort();
         }
 
-        DBHostConfig conf = new DBHostConfig(nodeHost, ip, port, nodeUrl, user, passwordEncryty, password);
+        DBHostConfig conf = new DBHostConfig(nodeHost, ip, port, nodeUrl, user, passwordEncryty, password,checkAlive);
         conf.setDbType(dbType);
         conf.setMaxCon(maxCon);
         conf.setMinCon(minCon);

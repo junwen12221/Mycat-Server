@@ -37,6 +37,8 @@ public interface BackendConnection extends ClosableConnection {
 
 	public Object getAttachment();
 
+    public void closeWithoutRsp(String reason);
+
 	// public long getThreadId();
 
 
@@ -58,10 +60,19 @@ public interface BackendConnection extends ClosableConnection {
 
 	public boolean isAutocommit();
 
+	public boolean isTxReadonly();
+	public int getSqlSelectLimit();
+
 	public long getId();
 
 	public void discardClose(String reason);
 
 	public void query(String sql, int charsetIndex);
+
+	public boolean checkAlive();
+
+    public void disableRead();
+
+    public void enableRead();
 
 }

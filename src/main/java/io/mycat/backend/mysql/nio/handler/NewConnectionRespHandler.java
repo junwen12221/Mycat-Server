@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -43,7 +43,7 @@ public class NewConnectionRespHandler implements ResponseHandler{
 		//
 		LOGGER.info("connectionAcquired "+conn);
 		
-		conn.release(); //  NewConnectionRespHandler 因为这个是由于空闲连接数低于配置，需要新建连接，但再新建连接的时候，
+		conn.release(); //  NewConnectionRespHandler 鍥犱负杩欎釜鏄敱浜庣┖闂茶繛鎺ユ暟浣庝簬閰嶇疆锛岄渶瑕佹柊寤鸿繛鎺ワ紝浣嗗啀鏂板缓杩炴帴鐨勬椂鍊欙紝
 		
 	}
 

@@ -40,17 +40,20 @@ public class ShowFullTables
     private static final EOFPacket eof = new EOFPacket();
 
     private static final String SCHEMA_KEY = "schemaName";
-    private static final String LIKE_KEY = "like";
-    private static final   Pattern pattern = Pattern.compile("^\\s*(SHOW)\\s++(FULL)*\\s*(TABLES)(\\s+(FROM)\\s+([a-zA-Z_0-9]+))?(\\s+(LIKE\\s+'(.*)'))?\\s*",Pattern.CASE_INSENSITIVE);
+    //private static final String LIKE_KEY = "like";
+    //private static final   Pattern pattern = Pattern.compile("^\\s*(SHOW)\\s++(FULL)*\\s*(TABLES)(\\s+(FROM)\\s+([a-zA-Z_0-9]+))?(\\s+(LIKE\\s+'(.*)'))?\\s*",Pattern.CASE_INSENSITIVE);
 
 	/**
 	 * response method.
 	 * @param c
 	 */
 	public static void response(ServerConnection c,String stmt,int type) {
-       String showSchemal= SchemaUtil.parseShowTableSchema(stmt) ;
-        String cSchema =showSchemal==null? c.getSchema():showSchemal;
-        SchemaConfig schema = MycatServer.getInstance().getConfig().getSchemas().get(cSchema);
+        String showSchema = SchemaUtil.parseShowTableSchema(stmt);
+        if (showSchema == null) {
+            showSchema = c.getSchema();
+        }
+
+        SchemaConfig schema = MycatServer.getInstance().getConfig().getSchemas().get(showSchema);
         if(schema != null) {
         	//不分库的schema，show tables从后端 mysql中查
             String node = schema.getDataNode();
@@ -162,34 +165,17 @@ public class ShowFullTables
 	 * @param stmt
 	 */
 	private static Map<String,String> buildFields(ServerConnection c,String stmt) {
-	 
 		Map<String,String> map = new HashMap<String, String>();
-
-		Matcher ma = pattern.matcher(stmt);
-
-		if(ma.find()){
-			  String schemaName=ma.group(6);
-			  if (null !=schemaName && (!"".equals(schemaName)) && (!"null".equals(schemaName))){
-				  map.put(SCHEMA_KEY, schemaName);
-			  }
-			  
-			 String like = ma.group(9);
-			 if (null !=like && (!"".equals(like)) && (!"null".equals(like))){
-				  map.put("LIKE_KEY", like);
-			  }
-			}
-
-
+        String fields [] =SchemaUtil.parseShowTable(stmt);
+        if (null !=fields[3] && (!"".equals(fields[3])) && (!"null".equals(fields[3]))){
+            map.put(SCHEMA_KEY, fields[3]);
+        }
+        if ((fields[5] ==null || !"table_type".equals(fields[5])) && null !=fields[8] && (!"".equals(fields[8])) && (!"null".equals(fields[8]))){
+            map.put("LIKE_KEY", fields[8]);
+        }
 		if(null==map.get(SCHEMA_KEY)){
 			map.put(SCHEMA_KEY, c.getSchema());
 		}
-		 
-		
-
-         
         return  map;
-        
 	}
-
-	
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -101,6 +101,13 @@ public class EnchachePool implements CachePool {
 	@Override
 	public long getMaxSize() {
 		return maxSize;
+	}
+
+	@Override
+	public void clearCache(String cacheName) {
+		if (cacheName != null){
+			enCache.remove(cacheName);
+		}
 	}
 
 }

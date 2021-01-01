@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -38,6 +38,7 @@ import io.mycat.MycatServer;
 import io.mycat.backend.BackendConnection;
 import io.mycat.backend.datasource.PhysicalDBNode;
 import io.mycat.backend.mysql.LoadDataUtil;
+import io.mycat.backend.mysql.listener.SqlExecuteStage;
 import io.mycat.config.ErrorCode;
 import io.mycat.config.MycatConfig;
 import io.mycat.config.model.SchemaConfig;
@@ -71,19 +72,19 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 	
 	// only one thread access at one time no need lock
 	private volatile byte packetId;
-	private volatile ByteBuffer buffer;
+	protected volatile ByteBuffer buffer;
 	private volatile boolean isRunning;
 	private Runnable terminateCallBack;
-	private long startTime;
-	private long netInBytes;
-	private long netOutBytes;
+	protected long startTime;
+	protected long netInBytes;
+	protected long netOutBytes;
 	private long selectRows;
-	private long affectedRows;
+	protected long affectedRows;
 	protected final AtomicBoolean errorRepsponsed = new AtomicBoolean(false);
 	
 	private boolean prepared;
-	private int fieldCount;
-	private List<FieldPacket> fieldPackets = new ArrayList<FieldPacket>();
+	protected int fieldCount;
+	protected List<FieldPacket> fieldPackets = new ArrayList<FieldPacket>();
 
     private volatile boolean isDefaultNodeShowTable;
     private volatile boolean isDefaultNodeShowFullTable;
@@ -123,7 +124,18 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 		}
         
 	}
-
+	public NonBlockingSession getSession() {
+		return this.session;
+	}
+	public RouteResultsetNode getRouteResultsetNode() {
+		return this.node;
+	}
+	public RouteResultset getRouteResultset(){
+		return this.rrs;
+	}
+	public ByteBuffer getBuffer() {
+		return this.buffer;
+	}
 	@Override
 	public void terminate(Runnable callback) {
 		boolean zeroReached = false;
@@ -139,7 +151,7 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 		}
 	}
 
-	private void endRunning() {
+	protected void endRunning() {
 		Runnable callback = null;
 		if (isRunning) {
 			isRunning = false;
@@ -165,7 +177,12 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 		startTime=System.currentTimeMillis();
 		ServerConnection sc = session.getSource();
 		this.isRunning = true;
-		this.packetId = 0;
+		if (rrs.isLoadData()) {
+			this.packetId = session.getSource().getLoadDataInfileHandler().getLastPackId();
+		} else {
+			this.packetId = 0;
+		}
+
 		final BackendConnection conn = session.getTarget(node);
 		LOGGER.debug("rrs.getRunOnSlave() " + rrs.getRunOnSlaveDebugInfo());
 		node.setRunOnSlave(rrs.getRunOnSlave());	// 实现 master/slave注解
@@ -223,9 +240,10 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 	private void executeException(BackendConnection c, Exception e) {
 		ErrorPacket err = new ErrorPacket();
 		err.packetId = ++packetId;
-		err.errno = ErrorCode.ERR_FOUND_EXCEPION;
-		err.message = StringUtil.encode(e.toString(), session.getSource().getCharset());
-
+		err.errno = ErrorCode.ERR_FOUND_EXCEPTION;
+		String message = e.toString();
+		LOGGER.error(message);
+		err.message = StringUtil.encode(message, session.getSource().getCharset());
 		this.backConnectionErr(err, c);
 	}
 
@@ -245,6 +263,8 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 //			source.setTxInterrupt(e.getMessage());
 			source.writeErrMessage(ErrorCode.ER_NEW_ABORTING_CONNECTION, e.getMessage());
 		}
+
+        source.getListener().fireEvent(SqlExecuteStage.END);
 	}
 
 	@Override
@@ -293,8 +313,8 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 		if (errorRepsponsed.compareAndSet(false, true)) {
 			source.writeErrMessage(errPkg.errno, new String(errPkg.message));
 		}
-		
 		recycleResources();
+        source.getListener().fireEvent(SqlExecuteStage.END);
 	}
 
 
@@ -314,10 +334,17 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 			ServerConnection source = session.getSource();
 			OkPacket ok = new OkPacket();
 			ok.read(data);
+			this.affectedRows += ok.affectedRows;
+
+			if (ok.hasMoreResultsExists()) {
+				// funnyAnt:当是批量update/delete语句，提示后面还有ok包
+				return;
+			}
+
             boolean isCanClose2Client =(!rrs.isCallStatement()) ||(rrs.isCallStatement() &&!rrs.getProcedure().isResultSimpleValue());
 			if (rrs.isLoadData()) {				
-				byte lastPackId = source.getLoadDataInfileHandler().getLastPackId();
-				ok.packetId = ++lastPackId;// OK_PACKET
+				// byte lastPackId = source.getLoadDataInfileHandler().getLastPackId();
+				ok.packetId = ++packetId;// OK_PACKET
 				source.getLoadDataInfileHandler().clear();
 				
 			} else if (isCanClose2Client) {
@@ -340,13 +367,12 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 				}	
 			}
             
-			this.affectedRows = ok.affectedRows;
-			
 			source.setExecuteSql(null);
+            source.getListener().fireEvent(SqlExecuteStage.END);
 			// add by lian
 			// 解决sql统计中写操作永远为0
-			QueryResult queryResult = new QueryResult(session.getSource().getUser(), 
-					rrs.getSqlType(), rrs.getStatement(), affectedRows, netInBytes, netOutBytes, startTime, System.currentTimeMillis(),0);
+            QueryResult queryResult = new QueryResult(session.getSource().getSchema(), session.getSource().getUser(),
+					rrs.getSqlType(), rrs.getStatement(), affectedRows, netInBytes, netOutBytes, startTime, System.currentTimeMillis(),0, source.getHost());
 			QueryResultDispatcher.dispatchQuery( queryResult );
 		}
 	}
@@ -386,10 +412,11 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 			}
 		}
 		source.setExecuteSql(null);
+        source.getListener().fireEvent(SqlExecuteStage.END);
 		//TODO: add by zhuam
 		//查询结果派发
-		QueryResult queryResult = new QueryResult(session.getSource().getUser(), 
-				rrs.getSqlType(), rrs.getStatement(), affectedRows, netInBytes, netOutBytes, startTime, System.currentTimeMillis(),resultSize);
+        QueryResult queryResult = new QueryResult(session.getSource().getSchema(), session.getSource().getUser(),
+				rrs.getSqlType(), rrs.getStatement(), affectedRows, netInBytes, netOutBytes, startTime, System.currentTimeMillis(),resultSize, source.getHost());
 		QueryResultDispatcher.dispatchQuery( queryResult );
 		
 	}
@@ -399,7 +426,7 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 	 * 
 	 * @return
 	 */
-	private ByteBuffer allocBuffer() {
+	protected ByteBuffer allocBuffer() {
 		if (buffer == null) {
 			buffer = session.getSource().allocate();
 		}
@@ -532,6 +559,7 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 		ErrorPacket err = new ErrorPacket();
 		err.packetId = ++packetId;
 		err.errno = ErrorCode.ER_ERROR_ON_CLOSE;
+		LOGGER.error(reason);
 		err.message = StringUtil.encode(reason, session.getSource()
 				.getCharset());
 		this.backConnectionErr(err, conn);

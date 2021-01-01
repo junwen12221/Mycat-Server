@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -48,7 +48,7 @@ public final class UseHandler {
             if (end > 0) {
                 schema = schema.substring(0, end - 1);
             }
-            schema = StringUtil.replaceChars(schema, "`", null);
+            schema = StringUtil.replaceChars(schema, "`", null,true);
             length = schema.length();
             if (schema.charAt(0) == '\'' && schema.charAt(length - 1) == '\'') {
                 schema = schema.substring(1, length - 1);

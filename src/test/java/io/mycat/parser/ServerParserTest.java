@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -188,13 +188,21 @@ public class ServerParserTest {
         Assert.assertEquals(ServerParseSet.AUTOCOMMIT_ON, ServerParseSet.parse("SET AUTOCOMMIT=on", 3));
         Assert.assertEquals(ServerParseSet.AUTOCOMMIT_ON, ServerParseSet.parse("set autoCOMMIT = ON", 3));
     }
-
+    @Test
+    public void testIsSetAutocommitOn2() {
+        Assert.assertEquals(ServerParseSet.AUTOCOMMIT_ON, ServerParseSet.parse("set @@session.autoCOMMIT = ON", 3));
+    }
     @Test
     public void testIsSetAutocommitOff() {
         Assert.assertEquals(ServerParseSet.AUTOCOMMIT_OFF, ServerParseSet.parse("set autocommit=0", 3));
         Assert.assertEquals(ServerParseSet.AUTOCOMMIT_OFF, ServerParseSet.parse("SET AUTOCOMMIT= 0", 3));
         Assert.assertEquals(ServerParseSet.AUTOCOMMIT_OFF, ServerParseSet.parse("set autoCOMMIT =OFF", 3));
         Assert.assertEquals(ServerParseSet.AUTOCOMMIT_OFF, ServerParseSet.parse("set autoCOMMIT = off", 3));
+        Assert.assertEquals(ServerParseSet.AUTOCOMMIT_OFF, ServerParseSet.parse("set @@session.autocommit  =OFF", 3));
+    }
+    @Test
+    public void testIsSetAutocommitOff2() {
+        Assert.assertEquals(ServerParseSet.AUTOCOMMIT_OFF, ServerParseSet.parse("set @@session.autocommit  =OFF", 3));
     }
 
     @Test
@@ -308,6 +316,36 @@ public class ServerParserTest {
                 ServerParseSet.parse(" set session transaction isolation level read  committed  ", " SET".length()));
         Assert.assertEquals(ServerParseSet.TX_READ_COMMITTED,
                 ServerParseSet.parse(" set session transaCTION ISOLATION LEVel read  committed ", " SET".length()));
+    }
+
+    @Test
+    public void testTxReadOnly() {
+        Assert.assertEquals(ServerParseSet.TX_READONLY,
+            ServerParseSet.parse("  SET SESSION TRANSACTION READ ONLY  ", "  SET".length()));
+        Assert.assertEquals(ServerParseSet.TX_READONLY,
+            ServerParseSet.parse(" set session transaction read only  ", " SET".length()));
+        Assert.assertEquals(ServerParseSet.TX_READONLY,
+            ServerParseSet.parse(" set session transaCTION Read Only ", " SET".length()));
+    }
+
+    @Test
+    public void testSqlSelectLimit() {
+        Assert.assertEquals(ServerParseSet.SQL_SELECT_LIMIT,
+            ServerParseSet.parse("  SET SQL_SELECT_LIMIT=1  ", "  SET".length()));
+        Assert.assertEquals(ServerParseSet.SQL_SELECT_LIMIT,
+            ServerParseSet.parse(" set sql_select_limit=1  ", " SET".length()));
+        Assert.assertEquals(ServerParseSet.SQL_SELECT_LIMIT,
+            ServerParseSet.parse(" Set Sql_Select_Limit=1 ", " SET".length()));
+    }
+
+    @Test
+    public void testTxReadWrite() {
+        Assert.assertEquals(ServerParseSet.TX_READWRITE,
+            ServerParseSet.parse("  SET SESSION TRANSACTION READ WRITE  ", "  SET".length()));
+        Assert.assertEquals(ServerParseSet.TX_READWRITE,
+            ServerParseSet.parse(" set session transaction read write  ", " SET".length()));
+        Assert.assertEquals(ServerParseSet.TX_READWRITE,
+            ServerParseSet.parse(" set session transaCTION Read Write ", " SET".length()));
     }
 
     @Test

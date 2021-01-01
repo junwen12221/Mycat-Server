@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese
@@ -216,6 +216,7 @@ public class XMLServerLoader {
                 String passwordDecrypt = DecryptUtil.mycatDecrypt(usingDecrypt,name,password);
                 user.setName(name);
                 user.setDefaultAccount(Boolean.parseBoolean(defaultAccount));
+                user.setDefaultSchema((String)props.get("defaultSchema"));
                 user.setPassword(passwordDecrypt);
                 user.setEncryptPassword(password);
 
@@ -339,19 +340,19 @@ public class XMLServerLoader {
         }
 
         if (system.getFakeMySQLVersion() != null) {
-            boolean validVersion = false;
+            boolean validVersion = true;
             String majorMySQLVersion = system.getFakeMySQLVersion();
             /*
              * 注意！！！ 目前MySQL官方主版本号仍然是5.x, 以后万一前面的大版本号变成2位数字，
              * 比如 10.x...,下面获取主版本的代码要做修改
              */
-            majorMySQLVersion = majorMySQLVersion.substring(0, majorMySQLVersion.indexOf(".", 2));
-            for (String ver : SystemConfig.MySQLVersions) {
-                // 这里只是比较mysql前面的大版本号
-                if (majorMySQLVersion.equals(ver)) {
-                    validVersion = true;
-                }
-            }
+//            majorMySQLVersion = majorMySQLVersion.substring(0, majorMySQLVersion.indexOf(".", 2));
+//            for (String ver : SystemConfig.MySQLVersions) {
+//                // 这里只是比较mysql前面的大版本号
+//                if (majorMySQLVersion.equals(ver)) {
+//                    validVersion = true;
+//                }
+//            }
 
             if (validVersion) {
                 Versions.setServerVersion(system.getFakeMySQLVersion());

@@ -1,9 +1,9 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * This code is free software;Designed and Developed mainly by many Chinese 
- * opensource volunteers. you can redistribute it and/or modify it under the 
+ * This code is free software;Designed and Developed mainly by many Chinese
+ * opensource volunteers. you can redistribute it and/or modify it under the
  * terms of the GNU General Public License version 2 only, as published by the
  * Free Software Foundation.
  *
@@ -16,8 +16,8 @@
  * You should have received a copy of the GNU General Public License version
  * 2 along with this work; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
- * 
- * Any questions about this component can be directed to it's project Web address 
+ *
+ * Any questions about this component can be directed to it's project Web address
  * https://code.google.com/p/opencloudb/.
  *
  */
@@ -31,6 +31,7 @@ import io.mycat.util.FormatUtil;
 
 import java.io.Serializable;
 import java.util.*;
+import java.util.Map.Entry;
 
 /**
  * @author mycat
@@ -40,8 +41,8 @@ public final class RouteResultset implements Serializable {
     private final int sqlType;
     private RouteResultsetNode[] nodes; // 路由结果节点
     private Set<String> subTables;
-    private SQLStatement sqlStatement; 
-    
+    private SQLStatement sqlStatement;
+
 
     private int limitStart;
     private boolean cacheAble;
@@ -72,11 +73,12 @@ public final class RouteResultset implements Serializable {
     // 传给 RouteResultsetNode 来实现，但是 强制走 slave需要增加一个属性来实现:
     private Boolean runOnSlave = null;	// 默认null表示不施加影响
 
-       //key=dataNode    value=slot
+    //key=dataNode    value=slot
     private Map<String,Integer>   dataNodeSlotMap=new HashMap<>();
 
     private boolean selectForUpdate;
     private boolean autoIncrement;
+    private Map<String, List<String>> subTableMaps;
 
     public boolean isSelectForUpdate() {
         return selectForUpdate;
@@ -85,9 +87,9 @@ public final class RouteResultset implements Serializable {
     public void setSelectForUpdate(boolean selectForUpdate) {
         this.selectForUpdate = selectForUpdate;
     }
-	
-	
-	 private List<String> tables;
+
+
+    private List<String> tables;
 
     public List<String> getTables() {
         return tables;
@@ -106,15 +108,15 @@ public final class RouteResultset implements Serializable {
     }
 
     public Boolean getRunOnSlave() {
-		return runOnSlave;
-	}
+        return runOnSlave;
+    }
     public String getRunOnSlaveDebugInfo() {
         return runOnSlave == null?"default":Boolean.toString(runOnSlave);
     }
-	public void setRunOnSlave(Boolean runOnSlave) {
-		this.runOnSlave = runOnSlave;
-	}
-	  private Procedure procedure;
+    public void setRunOnSlave(Boolean runOnSlave) {
+        this.runOnSlave = runOnSlave;
+    }
+    private Procedure procedure;
 
     public Procedure getProcedure()
     {
@@ -126,7 +128,7 @@ public final class RouteResultset implements Serializable {
         this.procedure = procedure;
     }
 
-	public boolean isLoadData()
+    public boolean isLoadData()
     {
         return isLoadData;
     }
@@ -241,7 +243,7 @@ public final class RouteResultset implements Serializable {
     public void setPrimaryKey(String primaryKey) {
         if (!primaryKey.contains(".")) {
             throw new java.lang.IllegalArgumentException(
-                    "must be table.primarykey fomat :" + primaryKey);
+                "must be table.primarykey fomat :" + primaryKey);
         }
         this.primaryKey = primaryKey;
     }
@@ -296,7 +298,7 @@ public final class RouteResultset implements Serializable {
     public void setNodes(RouteResultsetNode[] nodes) {
         if(nodes!=null)
         {
-           int nodeSize=nodes.length;
+            int nodeSize=nodes.length;
             for (RouteResultsetNode node : nodes)
             {
                 node.setTotalNodeSize(nodeSize);
@@ -346,7 +348,7 @@ public final class RouteResultset implements Serializable {
             for (RouteResultsetNode node : nodes)
             {
                 String dbType = dataNodeDbTypeMap.get(node.getName());
-                if (dbType.equalsIgnoreCase("mysql")) 
+                if (dbType.equalsIgnoreCase("mysql"))
                 {
                     node.setStatement(sql);   //mysql之前已经加好limit
                 } else if (sqlMapCache.containsKey(dbType))
@@ -385,48 +387,48 @@ public final class RouteResultset implements Serializable {
         this.canRunInReadDB = canRunInReadDB;
     }
 
-	public HavingCols getHavingCols() {
-		return (sqlMerge != null) ? sqlMerge.getHavingCols() : null;
-	}
+    public HavingCols getHavingCols() {
+        return (sqlMerge != null) ? sqlMerge.getHavingCols() : null;
+    }
 
-	public void setSubTables(Set<String> subTables) {
-		this.subTables = subTables;
-	}
+    public void setSubTables(Set<String> subTables) {
+        this.subTables = subTables;
+    }
 
-	public void setHavings(HavingCols havings) {
-		if (havings != null) {
-			createSQLMergeIfNull().setHavingCols(havings);
-		}
-	}
+    public void setHavings(HavingCols havings) {
+        if (havings != null) {
+            createSQLMergeIfNull().setHavingCols(havings);
+        }
+    }
 
-	// Added by winbill, 20160314, for having clause, Begin ==>
-	public void setHavingColsName(Object[] names) {
-		if (names != null && names.length > 0) {
-			createSQLMergeIfNull().setHavingColsName(names);
-		}
-	}
-	// Added by winbill, 20160314, for having clause, End  <==
+    // Added by winbill, 20160314, for having clause, Begin ==>
+    public void setHavingColsName(Object[] names) {
+        if (names != null && names.length > 0) {
+            createSQLMergeIfNull().setHavingColsName(names);
+        }
+    }
+    // Added by winbill, 20160314, for having clause, End  <==
 
     public SQLStatement getSqlStatement() {
-		return this.sqlStatement;
-	}
+        return this.sqlStatement;
+    }
 
-	public void setSqlStatement(SQLStatement sqlStatement) {
-		this.sqlStatement = sqlStatement;
-	}
+    public void setSqlStatement(SQLStatement sqlStatement) {
+        this.sqlStatement = sqlStatement;
+    }
 
-	public Set<String> getSubTables() {
-		return this.subTables;
-	}
-	
-	public boolean isDistTable(){
-		if(this.getSubTables()!=null && !this.getSubTables().isEmpty() ){
-			return true;
-		}
-		return false;
-	}
+    public Set<String> getSubTables() {
+        return this.subTables;
+    }
 
-	@Override
+    public boolean isDistTable(){
+        if(this.getSubTables()!=null && !this.getSubTables().isEmpty() ){
+            return true;
+        }
+        return false;
+    }
+
+    @Override
     public String toString() {
         StringBuilder s = new StringBuilder();
         s.append(statement).append(", route={");
@@ -447,4 +449,36 @@ public final class RouteResultset implements Serializable {
     public boolean getAutoIncrement() {
         return autoIncrement;
     }
+
+    public Map<String, List<String>> getSubTableMaps() {
+        return subTableMaps;
+    }
+
+    public void setSubTableMaps(Map<String, List<String>> subTableMaps) {
+        this.subTableMaps = subTableMaps;
+    }
+
+	/**
+	 * 合并路由节点相同的节点
+	 */
+	public void mergeSameNode() {
+		Map<String, RouteResultsetNode> mapNodes = new HashMap<>(64);
+		for (RouteResultsetNode node : nodes) {
+			if (mapNodes.containsKey(node.getName())) {
+				// merge node
+				RouteResultsetNode tmpNode = mapNodes.get(node.getName());
+				tmpNode.setStatement(tmpNode.getStatement() + ";" + node.getStatement());
+			} else {
+				mapNodes.put(node.getName(), node);
+			}
+		}
+
+		RouteResultsetNode[] newNodes = new RouteResultsetNode[mapNodes.size()];
+		int i = 0;
+		for (Entry<String, RouteResultsetNode> entry : mapNodes.entrySet()) {
+			newNodes[i++] = entry.getValue();
+		}
+		this.setNodes(newNodes);
+	}
+
 }

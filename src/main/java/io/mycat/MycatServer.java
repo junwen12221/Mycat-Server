@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese
@@ -28,16 +28,23 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.AsynchronousChannelGroup;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import io.mycat.backend.datasource.PhysicalDatasource;
-import io.mycat.backend.mysql.xa.*;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.slf4j.Logger;
@@ -46,12 +53,17 @@ import org.slf4j.LoggerFactory;
 import com.google.common.io.Files;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
-
 import io.mycat.backend.BackendConnection;
 import io.mycat.backend.datasource.PhysicalDBNode;
 import io.mycat.backend.datasource.PhysicalDBPool;
+import io.mycat.backend.datasource.PhysicalDatasource;
 import io.mycat.backend.heartbeat.zkprocess.MycatLeaderLatch;
 import io.mycat.backend.mysql.nio.handler.MultiNodeCoordinator;
+import io.mycat.backend.mysql.xa.CoordinatorLogEntry;
+import io.mycat.backend.mysql.xa.ParticipantLogEntry;
+import io.mycat.backend.mysql.xa.TxState;
+import io.mycat.backend.mysql.xa.XACommitCallback;
+import io.mycat.backend.mysql.xa.XARollbackCallback;
 import io.mycat.backend.mysql.xa.recovery.Repository;
 import io.mycat.backend.mysql.xa.recovery.impl.FileSystemRepository;
 import io.mycat.buffer.BufferPool;
@@ -159,6 +171,8 @@ public class MycatServer {
     private volatile MycatLeaderLatch leaderLatch;
 
     private final AtomicBoolean startup = new AtomicBoolean(false);
+
+    private ScheduledFuture<?> recycleSqlStatFuture = null;
 
     private MycatServer() {
 
@@ -477,15 +491,14 @@ public class MycatServer {
         heartbeatScheduler.scheduleAtFixedRate(dataNodeHeartbeat(), 0L, system.getDataNodeHeartbeatPeriod(), TimeUnit.MILLISECONDS);
         heartbeatScheduler.scheduleAtFixedRate(dataSourceOldConsClear(), 0L, DEFAULT_OLD_CONNECTION_CLEAR_PERIOD, TimeUnit.MILLISECONDS);
         heartbeatScheduler.scheduleAtFixedRate(dataNodeCalcActiveCons(), 0L, DEFAULT_DATANODE_CALC_ACTIVECOUNT, TimeUnit.MILLISECONDS);
+        //
         scheduler.schedule(catletClassClear(), 30000, TimeUnit.MILLISECONDS);
 
         if (system.getCheckTableConsistency() == 1) {
             scheduler.scheduleAtFixedRate(tableStructureCheck(), 0L, system.getCheckTableConsistencyPeriod(), TimeUnit.MILLISECONDS);
         }
 
-        if (system.getUseSqlStat() == 1) {
-            scheduler.scheduleAtFixedRate(recycleSqlStat(), 0L, DEFAULT_SQL_STAT_RECYCLE_PERIOD, TimeUnit.MILLISECONDS);
-        }
+        ensureSqlstatRecycleFuture();
 
         if (system.getUseGlobleTableCheck() == 1) {    // 全局表一致性检测是否开启
 //			scheduler.scheduleAtFixedRate(glableTableConsistencyCheck(), 0L, system.getGlableTableCheckPeriod(), TimeUnit.MILLISECONDS);
@@ -521,6 +534,20 @@ public class MycatServer {
         initRuleData();
 
         startup.set(true);
+    }
+
+    public void ensureSqlstatRecycleFuture() {
+        if (config.getSystem().getUseSqlStat() == 1) {
+            if(recycleSqlStatFuture == null){
+                recycleSqlStatFuture = scheduler
+                    .scheduleAtFixedRate(recycleSqlStat(), 0L, DEFAULT_SQL_STAT_RECYCLE_PERIOD, TimeUnit.MILLISECONDS);
+            }
+        } else {
+            if (recycleSqlStatFuture != null) {
+                recycleSqlStatFuture.cancel(false);
+                recycleSqlStatFuture = null;
+            }
+        }
     }
 
     public void initRuleData() {

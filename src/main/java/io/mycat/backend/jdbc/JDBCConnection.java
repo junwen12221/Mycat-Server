@@ -4,17 +4,25 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.sql.*;
-import java.util.*;
+import java.sql.CallableStatement;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Objects;
 
-import io.mycat.backend.mysql.PacketUtil;
-import io.mycat.route.Procedure;
-import io.mycat.route.ProcedureParameter;
-import io.mycat.util.*;
-import org.slf4j.Logger; import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.mycat.MycatServer;
 import io.mycat.backend.BackendConnection;
+import io.mycat.backend.mysql.PacketUtil;
 import io.mycat.backend.mysql.nio.handler.ConnectionHeartBeatHandler;
 import io.mycat.backend.mysql.nio.handler.ResponseHandler;
 import io.mycat.config.ErrorCode;
@@ -26,9 +34,16 @@ import io.mycat.net.mysql.FieldPacket;
 import io.mycat.net.mysql.OkPacket;
 import io.mycat.net.mysql.ResultSetHeaderPacket;
 import io.mycat.net.mysql.RowDataPacket;
+import io.mycat.route.Procedure;
+import io.mycat.route.ProcedureParameter;
 import io.mycat.route.RouteResultsetNode;
 import io.mycat.server.ServerConnection;
 import io.mycat.server.parser.ServerParse;
+import io.mycat.util.MysqlDefs;
+import io.mycat.util.ObjectUtil;
+import io.mycat.util.ResultSetUtil;
+import io.mycat.util.StringUtil;
+import io.mycat.util.TimeUtil;
 
 public class JDBCConnection implements BackendConnection {
 	protected static final Logger LOGGER = LoggerFactory
@@ -55,6 +70,9 @@ public class JDBCConnection implements BackendConnection {
 	private boolean isSpark = false;
 
 	private NIOProcessor processor;
+	private boolean setSchemaFail = false;
+
+	private volatile int sqlSelectLimit = -1;
 	
 	
 	
@@ -82,6 +100,14 @@ public class JDBCConnection implements BackendConnection {
 	@Override
 	public void close(String reason) {
 		try {
+			try {
+				if (!isAutocommit()) {
+					rollback();
+					con.setAutoCommit(true);
+				}
+			}catch (Exception e){
+				LOGGER.error("close jdbc connection, found it is in transcation so try to rollback");
+			}
 			con.close();
 			if(processor!=null){
 			    processor.removeConnection(this);
@@ -91,6 +117,12 @@ public class JDBCConnection implements BackendConnection {
 		}
 
 	}
+
+    @Override
+    public void closeWithoutRsp(String reason) {
+        // TODO Auto-generated method stub
+        close(reason);
+    }
 
 	public void setId(long id) {
         this.id = id;
@@ -264,7 +296,19 @@ public class JDBCConnection implements BackendConnection {
     }
 
 
-
+	private void syncTxReadonly(boolean txReadonly)
+	{
+		if(isTxReadonly() == txReadonly) {
+			return;
+		}
+		try
+		{
+			con.setReadOnly(false);
+		} catch (SQLException e)
+		{
+			LOGGER.warn("set setReadOnly error:",e);
+		}
+	}
     private void syncIsolation(int nativeIsolation)
     {
         int jdbcIsolation=convertNativeIsolationToJDBC(nativeIsolation);
@@ -293,8 +337,17 @@ public class JDBCConnection implements BackendConnection {
 
 		try {
             syncIsolation(sc.getTxIsolation()) ;
+			syncTxReadonly(sc.isTxReadonly());
 			if (!this.schema.equals(this.oldSchema)) {
 				con.setCatalog(schema);
+				if (!setSchemaFail) {
+                    try {
+                        con.setSchema(schema); //add@byron to test
+                    } catch (Throwable e) {
+                        LOGGER.error("JDBC setSchema Exception for " + schema, e);
+                        setSchemaFail = true;
+                    }
+                }
 				this.oldSchema = schema;
 			}
 			if (!this.isSpark) {
@@ -328,6 +381,7 @@ public class JDBCConnection implements BackendConnection {
 			error.packetId = ++packetId;
 			error.errno = e.getErrorCode();
 			error.message = msg.getBytes();
+			LOGGER.error("sql execute error, "+ msg , e);
 			this.respHandler.errorResponse(error.writeToBytes(sc), this);
 		}
 		catch (Exception e) {
@@ -366,19 +420,30 @@ public class JDBCConnection implements BackendConnection {
 		Statement stmt = null;
 		try {
 			stmt = con.createStatement();
-			int count = stmt.executeUpdate(sql);
+			int count = stmt.executeUpdate(sql,Statement.RETURN_GENERATED_KEYS);
+			long lastInsertId = 0;
+			ResultSet generatedKeys = stmt.getGeneratedKeys();
+			if (generatedKeys != null){
+				ResultSetMetaData metaData = generatedKeys.getMetaData();
+				if (metaData.getColumnCount() == 1){
+					lastInsertId = (generatedKeys.next() ? generatedKeys.getLong(1) : 0L);
+				}
+			}
 			OkPacket okPck = new OkPacket();
 			okPck.affectedRows = count;
-			okPck.insertId = 0;
+			okPck.insertId = lastInsertId;
 			okPck.packetId = ++packetId;
 			okPck.message = " OK!".getBytes();
 			this.respHandler.okResponse(okPck.writeToBytes(sc), this);
-		} finally {
+		}catch (Exception e){
+			LOGGER.error("",e);
+			throw e;
+		}finally {
 			if (stmt != null) {
 				try {
 					stmt.close();
 				} catch (SQLException e) {
-
+					LOGGER.error("",e);
 				}
 			}
 		}
@@ -403,7 +468,9 @@ public class JDBCConnection implements BackendConnection {
             Collection<ProcedureParameter> paramters=    procedure.getParamterMap().values();
             String callSql = procedure.toPreCallSql(null);
             stmt = con.prepareCall(callSql);
-
+			if (sc.getSqlSelectLimit() > 0) {
+				stmt.setMaxRows(sc.getSqlSelectLimit());
+			}
             for (ProcedureParameter paramter : paramters)
             {
                 if((ProcedureParameter.IN.equalsIgnoreCase(paramter.getParameterType())
@@ -424,7 +491,7 @@ public class JDBCConnection implements BackendConnection {
             boolean hadResults= stmt.execute();
 
             ByteBuffer byteBuf = sc.allocate();
-            if(procedure.getSelectColumns().size()>0)
+            if(procedure.getSelectColumns().size()>0&&!procedure.isResultList())
             {
                 List<FieldPacket> fieldPks = new LinkedList<FieldPacket>();
                 for (ProcedureParameter paramter : paramters)
@@ -474,8 +541,13 @@ public class JDBCConnection implements BackendConnection {
                 for (String name : procedure.getSelectColumns())
                 {
                     ProcedureParameter procedureParameter=   procedure.getParamterMap().get(name);
-                    curRow.add(StringUtil.encode(String.valueOf(stmt.getObject(procedureParameter.getIndex())),
-                            sc.getCharset()));
+					Object object = stmt.getObject(procedureParameter.getIndex());
+					if (object != null){
+						curRow.add(StringUtil.encode(String.valueOf(object),
+								sc.getCharset()));
+					}else {
+						curRow.add(null);
+					}
                 }
 
                 curRow.packetId = ++packetId;
@@ -559,8 +631,13 @@ public class JDBCConnection implements BackendConnection {
                             RowDataPacket curRow = new RowDataPacket(colunmCount);
                             for (int i = 0; i < colunmCount; i++) {
                                 int j = i + 1;
-                                curRow.add(StringUtil.encode(rs.getString(j),
-                                        sc.getCharset()));
+								Object object1 = rs.getObject(j);
+								if (object1 == null){
+									curRow.add(null);
+								}else {
+									curRow.add(StringUtil.encode(Objects.toString(object1),
+											sc.getCharset()));
+								}
                             }
                             curRow.packetId = ++packetId;
                             byteBuf = curRow.write(byteBuf, sc, false);
@@ -623,6 +700,9 @@ public class JDBCConnection implements BackendConnection {
 
 		try {
 			stmt = con.createStatement();
+			if (sc.getSqlSelectLimit() > 0) {
+				stmt.setMaxRows(sc.getSqlSelectLimit());
+			}
 			rs = stmt.executeQuery(sql);
 
 			List<FieldPacket> fieldPks = new LinkedList<FieldPacket>();
@@ -774,7 +854,8 @@ public class JDBCConnection implements BackendConnection {
 	public void execute(final RouteResultsetNode node,
 						final ServerConnection source, final boolean autocommit)
 			throws IOException {
-		Runnable runnable = new Runnable() {
+		this.sqlSelectLimit = source.getSqlSelectLimit();
+    	Runnable runnable = new Runnable() {
 			@Override
 			public void run() {
 				try {
@@ -852,6 +933,25 @@ public class JDBCConnection implements BackendConnection {
 	}
 
 	@Override
+	public boolean isTxReadonly() {
+		if (con == null) {
+			return true;
+		} else {
+			try {
+				return con.isReadOnly();
+			} catch (SQLException e) {
+
+			}
+		}
+		return true;
+	}
+
+	@Override
+	public int getSqlSelectLimit() {
+		return sqlSelectLimit;
+	}
+
+	@Override
 	public long getId() {
 		return id;
 	}
@@ -881,7 +981,36 @@ public class JDBCConnection implements BackendConnection {
 			LOGGER.debug("UnsupportedEncodingException :"+ e.getMessage());
 		}		
 	}
-	
-	
+
+	@Override
+	public boolean checkAlive() {
+		try {
+			if(!con.isClosed()){
+				if(pool.getConfig().isCheckAlive()){
+					try(Statement statement = con.createStatement()){
+						statement.execute(pool.getHeartbeat().getHeartbeatSQL());
+					}
+				}
+				return true;
+			}else {
+				return false;
+			}
+		} catch (SQLException e) {
+			LOGGER.error("connection is closed",e);
+			return false;
+		}
+	}
+
+    @Override
+    public void disableRead() {
+        // TODO Auto-generated method stub
+
+    }
+
+    @Override
+    public void enableRead() {
+        // TODO Auto-generated method stub
+
+    }
 
 }

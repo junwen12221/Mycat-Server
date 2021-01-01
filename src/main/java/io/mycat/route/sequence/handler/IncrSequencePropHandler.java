@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -105,7 +105,7 @@ public class IncrSequencePropHandler extends IncrSequenceHandler {
 	}
 
 	@Override
-	public Boolean updateCURIDVal(String prefixName, Long val) {
+	public synchronized Boolean  updateCURIDVal(String prefixName, Long val) {
 		Properties props = new Properties();
 		try {
 			props.load(new FileInputStream(filePath));

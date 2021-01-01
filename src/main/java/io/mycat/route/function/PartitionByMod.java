@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -23,6 +23,7 @@
  */
 package io.mycat.route.function;
 
+import io.mycat.util.StringUtil;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,7 +60,17 @@ public class PartitionByMod extends AbstractPartitionAlgorithm implements RuleAl
 			BigInteger bigNum = new BigInteger(columnValue).abs();
 			return (bigNum.mod(BigInteger.valueOf(count))).intValue();
 		} catch (NumberFormatException e){
-			throw new IllegalArgumentException(new StringBuilder().append("columnValue:").append(columnValue).append(" Please eliminate any quote and non number within it.").toString(),e);
+            // throw new IllegalArgumentException(new
+            // StringBuilder().append("columnValue:").append(columnValue).append(" Please
+            // eliminate any quote and non number within it.").toString(),e);
+ //           int value = Math.abs((columnValue).hashCode());
+//            return value % count;
+			/**
+ 			* hashcode后的值使用int类型超出数值范围时，返回负数，报数组下标越界
+ 			* date 2020/12/21
+ 			*/
+			long value = Math.abs(Long.valueOf((columnValue).hashCode()));
+			return (int)(value%count);
 		}
 
 	}
@@ -84,7 +95,7 @@ public class PartitionByMod extends AbstractPartitionAlgorithm implements RuleAl
 		int c=0;
 		for(int i=100_0000;i<total+100_0000;i++){//假设分片键从100万开始
 			c++;
-			int h=hash.calculate(Integer.toString(i));
+			int h=hash.calculate(StringUtil.removeBackquote(Integer.toString(i)));
 			bucket[h]++;
 			List<Integer> list=hashed.get(h);
 			if(list==null){
@@ -119,7 +130,7 @@ public class PartitionByMod extends AbstractPartitionAlgorithm implements RuleAl
 		int c=0;
 		for(int i:partition){//假设分片键从100万开始
 			c++;
-			int h=hash.calculate(Integer.toString(i));
+			int h=hash.calculate(StringUtil.removeBackquote(Integer.toString(i)));
 			bucket[h]++;
 		}
 		System.out.println(c+"   "+total);

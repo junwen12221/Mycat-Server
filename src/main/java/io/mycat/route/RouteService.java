@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -70,6 +70,7 @@ public class RouteService {
 	public RouteResultset route(SystemConfig sysconf, SchemaConfig schema,
 			int sqlType, String stmt, String charset, ServerConnection sc)
 			throws SQLNonTransientException {
+		stmt = stmt.trim();
 		RouteResultset rrs = null;
 		String cacheKey = null;
 
@@ -200,7 +201,7 @@ public class RouteService {
 				return -1;        // false
 			}
 			if(sql.charAt(++j) == 'm' && sql.charAt(++j) == 'y' && sql.charAt(++j) == 'c'
-				&& sql.charAt(++j) == 'a' && sql.charAt(++j) == 't' && (sql.charAt(++j) == ':' || sql.charAt(j) == '#')) {
+				&& sql.charAt(++j) == 'a' && sql.charAt(++j) == 't' && (sql.charAt(++j) == ':' || sql.charAt(j) == '#' || sql.charAt(j) == '-')) {
 				return j + 1;    // true，同时返回注解部分的长度
 			}
 		}

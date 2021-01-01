@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -32,7 +32,7 @@ public abstract class Versions {
     public static final byte PROTOCOL_VERSION = 10;
 
     /**服务器版本**/
-    public static byte[] SERVER_VERSION = "5.6.29-mycat-1.6.7.1-release-20190507113837".getBytes();
+    public static byte[] SERVER_VERSION = "5.6.29-mycat-1.6.7.5-release-20200428154739".getBytes();
 
     public static void setServerVersion(String version) {
         byte[] mysqlVersionPart = version.getBytes();

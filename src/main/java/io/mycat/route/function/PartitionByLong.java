@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -59,6 +59,7 @@ public final class PartitionByLong extends AbstractPartitionAlgorithm implements
 //		columnValue = NumberParseUtil.eliminateQoute(columnValue);
 		try {
 			long key = Long.parseLong(columnValue);
+			key = (key >>> 32) ^ key;
 			return partitionUtil.partition(key);
 		} catch (NumberFormatException e){
 			throw new IllegalArgumentException(new StringBuilder().append("columnValue:").append(columnValue).append(" Please eliminate any quote and non number within it.").toString(),e);

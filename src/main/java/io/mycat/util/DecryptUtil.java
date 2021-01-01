@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -23,25 +23,19 @@
  */
 package io.mycat.util;
 
-import java.security.InvalidKeyException;
-import java.security.Key;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.SecureRandom;
+import io.mycat.config.util.ConfigException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.crypto.Cipher;
+import java.security.*;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-
-import javax.crypto.Cipher;
-
-import io.mycat.config.util.ConfigException;
+import java.util.Arrays;
 
 /**
  * @author songwie
@@ -53,12 +47,34 @@ public class DecryptUtil {
 	public static final String DEFAULT_PUBLIC_KEY_STRING = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAKHGwq7q2RmwuRgKxBypQHw0mYu4BQZ3eMsTrdK8E6igRcxsobUC7uT0SoxIjl1WveWniCASejoQtn/BY6hVKWsCAwEAAQ==";
 
 	public static void main(String[] args) throws Exception {
+	  System.out.println("其中 0:user:password是加密字符串,有两种格式\n"
+        + "\n"
+        + "dataHost加密格式\n"
+        + "1:hostM1:root:123456\n"
+        + "1代表是dataHost加密\n"
+        + "hostM1是<writeHost host=\"hostM1\" \n"
+        + "root是user=\"root\"\n"
+        + "123456是 password=明文密码(123456)\n"
+        + "\n"
+        + "对应writeHost配置\n"
+        + "\t\t<writeHost host=\"hostM1\" url=\"localhost:3306\" user=\"root\"\n"
+        + "\t\t\t\t   password=\"BpkNIjF7LfzS1C76HT7B1bJgmGIDtPihqIvHBlC92L1IFqsMfoJEMk1EkxSzjasWB4GWoUcODYO4AaJstdAp5w==\" usingDecrypt=\"1\">\n"
+        + "\t\t\t<!-- can have multi read hosts -->\n"
+        + "\t\t</writeHost>\n"
+        + "\n"
+        + "mycat用户登录密码加密格式\n"
+        + "0:root:123456\n"
+        + "0代表mycat用户登录密码加密\n"
+        + "\t<user name=\"root\" defaultAccount=\"true\">\n"
+        + "\t\t<property name=\"usingDecrypt\">1</property>\n"
+        + "\t\t<property name=\"password\">d6D+pOmkuUoY09p4/aivwMsScLa7zfjIwAxvkEhr3v7en06mEXoX9DTTjQNug5CfvGf7Wy9oLcthYI3yLMSjIg==</property>\n"
+        + "\t\t<property name=\"schemas\">TESTDB</property>");
 		String password = args[0];
 		System.out.println(encrypt(password));
 	}
 	
 	public static String mycatDecrypt(String usingDecrypt,String user ,String passwrod){
-		if("1".equals(usingDecrypt)){
+		if("1".equals(usingDecrypt)||"true".equalsIgnoreCase(usingDecrypt)){
         	//type:user:password
         	//0:test:test
         	boolean flag = false;
@@ -79,7 +95,7 @@ public class DecryptUtil {
 		return passwrod;
 	}
 	public static String DBHostDecrypt(String usingDecrypt,String host,String user ,String passwrod){
-		if("1".equals(usingDecrypt)){
+		if("1".equals(usingDecrypt)||"true".equalsIgnoreCase(usingDecrypt)){
 			//type:host:user:password
         	//1:myhost1:test:test
         	boolean flag = false;

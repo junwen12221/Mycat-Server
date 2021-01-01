@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, OpenCloudDB/MyCAT and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software;Designed and Developed mainly by many Chinese 
@@ -23,6 +23,7 @@
  */
 package io.mycat.backend.datasource;
 
+import io.mycat.MycatServer;
 import org.slf4j.Logger; import org.slf4j.LoggerFactory;
 
 import io.mycat.backend.BackendConnection;
@@ -92,6 +93,11 @@ public class PhysicalDBNode {
 	public void getConnection(String schema,boolean autoCommit, RouteResultsetNode rrs,
 							ResponseHandler handler, Object attachment) throws Exception {
 		checkRequest(schema);
+
+		boolean needMaster = !autoCommit && MycatServer.getInstance().getConfig().getSystem().isStrictTxIsolation();
+		if (needMaster && rrs.getRunOnSlave()==null){
+			rrs.setRunOnSlave(false);//#2305
+		}
 		if (dbPool.isInitSuccess()) {
 			LOGGER.debug("rrs.getRunOnSlave() " + rrs.getRunOnSlaveDebugInfo());
 			if(rrs.getRunOnSlave() != null){		// 带有 /*db_type=master/slave*/ 注解
